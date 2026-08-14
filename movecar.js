@@ -431,7 +431,7 @@ const HTMLPage = {
 
     <div class="actions">
         <button class="btn btn-primary" id="notifyBtn" onclick="app.notifyOwner()">
-          <span>📨</span>
+          <span>⚡</span>
           <span>一键通知挪车</span>
         </button>
       ${config.phoneNumber ? `
