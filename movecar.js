@@ -426,7 +426,7 @@ const HTMLPage = {
     <div class="icon">🚗</div>
       <div class="header">
         <h1>抱歉，挡到您了</h1>
-        <p>请点下方按钮通知车主挪车</p>
+        <p>请点下方按钮，一键通知车主挪车</p>
       </div>
 
     <div class="actions">
