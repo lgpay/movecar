@@ -168,7 +168,7 @@ class WeChatAPI {
       return { success: true, messageId: result.msgid };
     } catch (error) {
       console.error('sendTextMessage error:', error.message);
-      return { success: false, message: '通知发送失败，请稍后重试' };
+      return { success: false, message: '发送失败，请稍后重试' };
     }
   }
 
@@ -201,24 +201,24 @@ class APIHandler {
   }
 
   async notifyOwner(ip = '', deviceInfo = null, geo = null) {
-    const message = '您好，有人需要您挪车，麻烦您尽快处理，感谢您的配合~ 🙏';
+    const message = '您好，有人需要您挪车，请尽快处理，谢谢🙏';
     const result = await this.weChat.sendTextMessage(message + buildFooter(deviceInfo, ip, geo));
-    return result.success ? ResponseUtils.success('提醒已发送，车主会尽快处理') : ResponseUtils.error(result.message);
+    return result.success ? ResponseUtils.success('已通知车主') : ResponseUtils.error(result.message);
   }
 
   async sendMessage(data, ip = '', geo = null) {
     if (!data.message || !data.message.trim()) {
-      return ResponseUtils.error('消息内容不能为空', 400);
+      return ResponseUtils.error('留言不能为空', 400);
     }
 
     const message = data.message.trim();
     if (message.length > MAX_MESSAGE_LENGTH) {
-      return ResponseUtils.error(`消息过长，请限制在 ${MAX_MESSAGE_LENGTH} 字以内`, 400);
+      return ResponseUtils.error(`留言过长（最多 ${MAX_MESSAGE_LENGTH} 字）`, 400);
     }
 
     const fullMessage = `💬 访客留言：\n${message}` + buildFooter(data.deviceInfo, ip, geo);
     const result = await this.weChat.sendTextMessage(fullMessage);
-    return result.success ? ResponseUtils.success('消息已发出，车主会尽快处理') : ResponseUtils.error(result.message);
+    return result.success ? ResponseUtils.success('已发送') : ResponseUtils.error(result.message);
   }
 
   async healthCheck() {
@@ -424,10 +424,10 @@ const HTMLPage = {
 <body>
   <div class="card">
     <div class="icon">🚗</div>
-    <div class="header">
-      <h1>非常抱歉，给您造成不便</h1>
-      <p>如果需要挪车，请点击下方按钮通知车主</p>
-    </div>
+      <div class="header">
+        <h1>抱歉，挡到您了</h1>
+        <p>请点下方按钮通知车主挪车</p>
+      </div>
 
     <div class="actions">
       <button class="btn btn-primary" id="notifyBtn" onclick="app.notifyOwner()">
@@ -445,11 +445,11 @@ const HTMLPage = {
     <div class="divider"></div>
 
     <div class="message-section">
-      <label class="label">发消息给车主</label>
-      <textarea id="messageContent" placeholder="请输入消息内容（最多 ${MAX_MESSAGE_LENGTH} 字）" maxlength="${MAX_MESSAGE_LENGTH}"></textarea>
-      <button class="btn btn-primary" id="sendBtn" onclick="app.sendMessage()" style="margin-top: 12px;">
-        <span>发送消息</span>
-      </button>
+        <label class="label">给车主留言</label>
+        <textarea id="messageContent" placeholder="请输入留言（最多 ${MAX_MESSAGE_LENGTH} 字）" maxlength="${MAX_MESSAGE_LENGTH}"></textarea>
+        <button class="btn btn-primary" id="sendBtn" onclick="app.sendMessage()" style="margin-top: 12px;">
+          <span>发送</span>
+        </button>
     </div>
   </div>
 
@@ -503,14 +503,14 @@ const HTMLPage = {
         if (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
           window.location.href = 'tel:' + this.ownerPhone;
         } else {
-          this.showToast('请在手机上点击以拨打电话：' + this.ownerPhone, false);
+          this.showToast('请用手机拨打：' + this.ownerPhone, false);
         }
       },
 
       async sendMessage() {
         const msg = document.getElementById('messageContent').value.trim();
         if (!msg) {
-          this.showToast('请填写消息内容', false);
+          this.showToast('留言不能为空', false);
           return;
         }
         this.setLoading(document.getElementById('sendBtn'), true);
@@ -609,7 +609,7 @@ class RequestHandler {
       if (pathname === '/notify-owner') {
         if (method !== 'POST') return ResponseUtils.error('方法不允许', 405);
         config.validate();
-        if (!rateLimiter.check(ip)) return ResponseUtils.error('操作过于频繁，请稍后再试', 429);
+        if (!rateLimiter.check(ip)) return ResponseUtils.error('操作太频繁，请稍后再试', 429);
         let data;
         try {
           data = await request.json();
@@ -622,7 +622,7 @@ class RequestHandler {
       if (pathname === '/send-message') {
         if (method !== 'POST') return ResponseUtils.error('方法不允许', 405);
         config.validate();
-        if (!rateLimiter.check(ip)) return ResponseUtils.error('操作过于频繁，请稍后再试', 429);
+        if (!rateLimiter.check(ip)) return ResponseUtils.error('操作太频繁，请稍后再试', 429);
         let data;
         try {
           data = await request.json();
