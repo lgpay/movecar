@@ -208,15 +208,15 @@ class APIHandler {
 
   async sendMessage(data, ip = '', geo = null) {
     if (!data.message || !data.message.trim()) {
-      return ResponseUtils.error('留言不能为空', 400);
+      return ResponseUtils.error('信息不能为空', 400);
     }
 
     const message = data.message.trim();
     if (message.length > MAX_MESSAGE_LENGTH) {
-      return ResponseUtils.error(`留言过长（最多 ${MAX_MESSAGE_LENGTH} 字）`, 400);
+      return ResponseUtils.error(`信息过长（最多 ${MAX_MESSAGE_LENGTH} 字）`, 400);
     }
 
-    const fullMessage = `💬 访客留言：\n${message}` + buildFooter(data.deviceInfo, ip, geo);
+    const fullMessage = `💬 访客信息：\n${message}` + buildFooter(data.deviceInfo, ip, geo);
     const result = await this.weChat.sendTextMessage(fullMessage);
     return result.success ? ResponseUtils.success('已发送') : ResponseUtils.error(result.message);
   }
@@ -445,8 +445,8 @@ const HTMLPage = {
     <div class="divider"></div>
 
     <div class="message-section">
-        <label class="label">给车主留言</label>
-        <textarea id="messageContent" placeholder="请输入留言（最多 ${MAX_MESSAGE_LENGTH} 字）" maxlength="${MAX_MESSAGE_LENGTH}"></textarea>
+        <label class="label">给车主发信息</label>
+        <textarea id="messageContent" placeholder="请输入信息（最多 ${MAX_MESSAGE_LENGTH} 字）" maxlength="${MAX_MESSAGE_LENGTH}"></textarea>
         <button class="btn btn-primary" id="sendBtn" onclick="app.sendMessage()" style="margin-top: 12px;">
           <span>发送</span>
         </button>
@@ -510,7 +510,7 @@ const HTMLPage = {
       async sendMessage() {
         const msg = document.getElementById('messageContent').value.trim();
         if (!msg) {
-          this.showToast('留言不能为空', false);
+          this.showToast('信息不能为空', false);
           return;
         }
         this.setLoading(document.getElementById('sendBtn'), true);
