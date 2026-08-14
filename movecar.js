@@ -445,7 +445,7 @@ const HTMLPage = {
     <div class="divider"></div>
 
     <div class="message-section">
-        <label class="label">给车主发信息</label>
+        <label class="label">发信息给车主</label>
         <textarea id="messageContent" placeholder="请输入信息（最多 ${MAX_MESSAGE_LENGTH} 字）" maxlength="${MAX_MESSAGE_LENGTH}"></textarea>
         <button class="btn btn-primary" id="sendBtn" onclick="app.sendMessage()" style="margin-top: 12px;">
           <span>发送</span>
