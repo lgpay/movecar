@@ -2,18 +2,3 @@ name = "movecar"
 main = "movecar.js"
 compatibility_date = "2024-11-13"
 usage_model = "standard"
-
-# ==================== 环境变量（需手动配置） ====================
-# 本文件不内置任何变量值，部署前请自行填入。
-#
-# 方式一：明文变量 —— 取消下方注释并填入你自己的值
-# [vars]
-# AGENT_ID = "你的企业微信应用 AgentId"
-# BASE_URL = "https://qyapi.weixin.qq.com"   # 可省略，使用企业微信官方地址
-# CORP_ID = "你的企业微信 CorpId"
-# PHONE_NUMBER = "车主手机号(可选，留空则不显示拨号按钮)"
-# USER = "接收通知的企业微信账号(touser)"
-#
-# 方式二：密钥 CORP_SECRET —— 绝不能写进本文件（公开仓库会泄露）
-#   请执行：wrangler secret put CORP_SECRET
-#   或在 Dashboard → Worker → Settings → Variables and Secrets → Add secret

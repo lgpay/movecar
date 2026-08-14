@@ -18,34 +18,6 @@
 | `PHONE_NUMBER` | 明文 | 否 | 无 | 车主手机号，用于 H5「拨打电话」按钮；留空则不显示该按钮 |
 | `BASE_URL` | 明文 | 否 | `https://qyapi.weixin.qq.com` | 企业微信 API 地址；一般无需修改 |
 
-### 配置方式
-
-**明文变量**（`CORP_ID` / `AGENT_ID` / `USER` / `PHONE_NUMBER` / `BASE_URL`）：
-打开 `wrangler.toml`，取消 `[vars]` 注释并填入你自己的值，例如：
-
-```toml
-[vars]
-AGENT_ID = "你的企业微信应用 AgentId"
-BASE_URL = "https://qyapi.weixin.qq.com"   # 一般无需修改
-CORP_ID = "你的企业微信 CorpId"
-PHONE_NUMBER = "车主手机号(可选)"
-USER = "接收通知的企业微信账号"
-```
-
-**密钥 `CORP_SECRET`（必做）**：
-
-```bash
-# 方式一：命令行（推荐）
-wrangler secret put CORP_SECRET
-# 按提示粘贴企业微信应用 Secret
-
-# 方式二：Cloudflare Dashboard
-# Worker → movecar → Settings → Variables and Secrets → Add secret
-# 名称填 CORP_SECRET，值填真实 Secret
-```
-
-> ⚠️ **安全提示**：`CORP_SECRET` 是敏感密钥，仓库（含 `wrangler.toml`）中**不得**出现其真实值。
-
 ## 部署
 
 ### 本地部署
