@@ -184,7 +184,7 @@ class WeChatAPI {
     }
   }
 
-  async fetchWithTimeout(url, options = {}, timeout = 10000) {
+  async fetchWithTimeout(url, options = {}, timeout = 6000) {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeout);
 
@@ -599,8 +599,9 @@ class RequestHandler {
     };
   }
 
-  async handle(request) {
+  async handle(event) {
     try {
+      const request = event.request;
       const url = new URL(request.url);
       const pathname = url.pathname;
       const method = request.method;
@@ -652,6 +653,13 @@ class RequestHandler {
 
       // 默认：GET 返回 HTML 页面，其他方法返回 404
       if (method === 'GET') {
+        // 打开页面时后台预热 token（waitUntil 不阻塞页面返回）；
+        // token 已缓存则直接返回、不额外打微信，因此不会多耗配额。
+        // 使首次点击「一键通知」落在热路径，避开冷启动取 token 的超时风险。
+        try {
+          config.validate();
+          event.waitUntil(this.weChat.getAccessToken().catch(() => {}));
+        } catch (_) { /* 变量未配置则不预热 */ }
         return ResponseUtils.html(HTMLPage.generate());
       }
       return ResponseUtils.error('Not Found', 404);
@@ -668,5 +676,5 @@ class RequestHandler {
 const handler = new RequestHandler();
 
 addEventListener('fetch', event => {
-  event.respondWith(handler.handle(event.request));
+  event.respondWith(handler.handle(event));
 });
