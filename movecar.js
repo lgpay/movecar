@@ -22,6 +22,28 @@ const config = {
   }
 };
 
+// ==================== 常量 ====================
+const MAX_MESSAGE_LENGTH = 500; // 单条消息最大长度（企业微信文本上限 2048 字节，此处留余量）
+
+// ==================== 频率限制（内存，按 isolate 隔离） ====================
+// 说明：Cloudflare Workers 每个 isolate 内存独立，内存计数无法跨 isolate 共享，
+// 因此只能防同 isolate 内的常规刷量，无法防分布式攻击。如需跨 isolate 强限制，
+// 应改用 KV 绑定（本迭代未引入）。
+const rateLimiter = {
+  windowMs: 60 * 1000,
+  max: 5,
+  hits: new Map(),
+  check(ip) {
+    const now = Date.now();
+    const arr = (this.hits.get(ip) || []).filter(t => now - t < this.windowMs);
+    this.hits.set(ip, arr);
+    if (arr.length >= this.max) return false;
+    arr.push(now);
+    this.hits.set(ip, arr);
+    return true;
+  }
+};
+
 // ==================== 响应工具 ====================
 const ResponseUtils = {
   json(data, status = 200, headers = {}) {
@@ -35,7 +57,12 @@ const ResponseUtils = {
   },
 
   html(content) {
-    return new Response(content, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
+    return new Response(content, {
+      headers: {
+        'Content-Type': 'text/html;charset=UTF-8',
+        'Cache-Control': 'public, max-age=300'
+      }
+    });
   },
 
   success(message = '操作成功') {
@@ -46,6 +73,18 @@ const ResponseUtils = {
     return this.json({ success: false, message }, status);
   }
 };
+
+// 组装设备信息段落（仅在确有信息时返回，否则空串）
+function buildDeviceBlock(deviceInfo, ip) {
+  const lines = [];
+  if (ip && ip !== '未知IP') lines.push(`IP地址：${ip}`);
+  if (deviceInfo) {
+    if (deviceInfo.os) lines.push(`操作系统：${deviceInfo.os}`);
+    if (deviceInfo.browser) lines.push(`浏览器：${deviceInfo.browser}`);
+    if (deviceInfo.screen) lines.push(`屏幕：${deviceInfo.screen}`);
+  }
+  return lines.length ? `\n\n📱 设备信息：\n${lines.join('\n')}` : '';
+}
 
 // ==================== 企业微信 API ====================
 class WeChatAPI {
@@ -78,7 +117,9 @@ class WeChatAPI {
 
       return data.access_token;
     } catch (error) {
-      throw new Error(`获取 access_token 时发生错误: ${error.message}`);
+      // 仅记录详情，对外返回通用文案
+      console.error('getAccessToken error:', error.message);
+      throw new Error('通知服务暂时不可用');
     }
   }
 
@@ -103,12 +144,14 @@ class WeChatAPI {
       const result = await response.json();
 
       if (result.errcode !== 0) {
-        throw new Error(`发送消息失败: ${result.errmsg} (${result.errcode})`);
+        console.error('WeChat send failed:', result.errmsg, result.errcode);
+        throw new Error('通知发送失败，请稍后重试');
       }
 
       return { success: true, messageId: result.msgid };
     } catch (error) {
-      return { success: false, message: error.message };
+      console.error('sendTextMessage error:', error.message);
+      return { success: false, message: '通知发送失败，请稍后重试' };
     }
   }
 
@@ -142,12 +185,7 @@ class APIHandler {
 
   async notifyOwner(ip = '', deviceInfo = null) {
     let message = '您好，有人需要您挪车，麻烦您尽快处理！\n\n感谢您的配合~ 🙏';
-
-    if (deviceInfo || ip) {
-      message += '\n\n📱 设备信息：\n';
-      if (ip) message += `IP地址：${ip}\n`;
-      if (deviceInfo.os) message += `操作系统：${deviceInfo.os}`;
-    }
+    message += buildDeviceBlock(deviceInfo, ip);
 
     const result = await this.weChat.sendTextMessage(message);
     return result.success ? ResponseUtils.success('提醒已发送，车主会尽快处理') : ResponseUtils.error(result.message);
@@ -158,15 +196,13 @@ class APIHandler {
       return ResponseUtils.error('消息内容不能为空', 400);
     }
 
-    let message = data.message.trim();
-
-    if (data.deviceInfo || ip) {
-      message += '\n\n📱 设备信息：\n';
-      if (ip) message += `IP地址：${ip}\n`;
-      if (data.deviceInfo.os) message += `操作系统：${data.deviceInfo.os}`;
+    const message = data.message.trim();
+    if (message.length > MAX_MESSAGE_LENGTH) {
+      return ResponseUtils.error(`消息过长，请限制在 ${MAX_MESSAGE_LENGTH} 字以内`, 400);
     }
 
-    const result = await this.weChat.sendTextMessage(message);
+    const fullMessage = message + buildDeviceBlock(data.deviceInfo, ip);
+    const result = await this.weChat.sendTextMessage(fullMessage);
     return result.success ? ResponseUtils.success('消息已发出，车主会尽快处理') : ResponseUtils.error(result.message);
   }
 
@@ -395,7 +431,7 @@ const HTMLPage = {
 
     <div class="message-section">
       <label class="label">发消息给车主</label>
-      <textarea id="messageContent" placeholder="请输入消息内容"></textarea>
+      <textarea id="messageContent" placeholder="请输入消息内容（最多 ${MAX_MESSAGE_LENGTH} 字）" maxlength="${MAX_MESSAGE_LENGTH}"></textarea>
       <button class="btn btn-primary" id="sendBtn" onclick="app.sendMessage()" style="margin-top: 12px;">
         <span>发送消息</span>
       </button>
@@ -406,7 +442,7 @@ const HTMLPage = {
 
   <script>
     const app = {
-      ownerPhone: '${config.phoneNumber.replace(/'/g, "\\'")}',
+      ownerPhone: ${JSON.stringify(config.phoneNumber)},
 
       setLoading(btn, loading) {
         btn.disabled = loading;
@@ -445,7 +481,15 @@ const HTMLPage = {
       },
 
       callOwner() {
-        window.location.href = 'tel:' + this.ownerPhone;
+        if (!this.ownerPhone) {
+          this.showToast('车主未留电话', false);
+          return;
+        }
+        if (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+          window.location.href = 'tel:' + this.ownerPhone;
+        } else {
+          this.showToast('请在手机上点击以拨打电话：' + this.ownerPhone, false);
+        }
       },
 
       async sendMessage() {
@@ -534,15 +578,29 @@ class RequestHandler {
       }
 
       // API 路由
-      if (pathname === '/notify-owner' && method === 'POST') {
+      if (pathname === '/notify-owner') {
+        if (method !== 'POST') return ResponseUtils.error('方法不允许', 405);
         config.validate();
-        const data = await request.json();
+        if (!rateLimiter.check(ip)) return ResponseUtils.error('操作过于频繁，请稍后再试', 429);
+        let data;
+        try {
+          data = await request.json();
+        } catch {
+          return ResponseUtils.error('请求格式错误', 400);
+        }
         return await this.api.notifyOwner(ip, data.deviceInfo);
       }
 
-      if (pathname === '/send-message' && method === 'POST') {
+      if (pathname === '/send-message') {
+        if (method !== 'POST') return ResponseUtils.error('方法不允许', 405);
         config.validate();
-        const data = await request.json();
+        if (!rateLimiter.check(ip)) return ResponseUtils.error('操作过于频繁，请稍后再试', 429);
+        let data;
+        try {
+          data = await request.json();
+        } catch {
+          return ResponseUtils.error('请求格式错误', 400);
+        }
         return await this.api.sendMessage(data, ip);
       }
 
@@ -550,12 +608,16 @@ class RequestHandler {
         return await this.api.healthCheck();
       }
 
-      // 默认返回 HTML 页面
-      return ResponseUtils.html(HTMLPage.generate());
+      // 默认：GET 返回 HTML 页面，其他方法返回 404
+      if (method === 'GET') {
+        return ResponseUtils.html(HTMLPage.generate());
+      }
+      return ResponseUtils.error('Not Found', 404);
 
     } catch (error) {
+      // 对外不暴露内部错误细节
       console.error('Request error:', error);
-      return ResponseUtils.error(error.message);
+      return ResponseUtils.error('服务器内部错误', 500);
     }
   }
 }
