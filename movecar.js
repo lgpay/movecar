@@ -83,12 +83,22 @@ function formatTime(date = new Date()) {
   }).format(date).replace(/\//g, '-');
 }
 
-// 组装通知页脚：时间 + 设备 + IP（按有内容才展示）
-function buildFooter(deviceInfo, ip) {
+// 国家代码 → 中文名（常见情况）
+const COUNTRY_CN = { CN: '中国', HK: '中国香港', MO: '中国澳门', TW: '中国台湾' };
+
+// 组装通知页脚：时间 + 设备 + 归属地 + IP（按有内容才展示）
+function buildFooter(deviceInfo, ip, geo) {
   const lines = [`📅 时间：${formatTime()}`];
   const dev = [deviceInfo && deviceInfo.os, deviceInfo && deviceInfo.browser, deviceInfo && deviceInfo.screen]
     .filter(Boolean);
   if (dev.length) lines.push(`📱 设备：${dev.join(' · ')}`);
+  if (geo) {
+    const country = COUNTRY_CN[geo.country] || geo.country || '';
+    const loc = [geo.region, geo.city].filter(Boolean).join(' ');
+    const locStr = [country, loc].filter(Boolean).join(' ');
+    if (locStr) lines.push(`📍 归属地：${locStr}`);
+    if (geo.org) lines.push(`🏢 ${geo.org}`);
+  }
   if (ip && ip !== '未知IP') lines.push(`🌐 IP：${ip}`);
   return `\n\n${lines.join('\n')}`;
 }
@@ -190,13 +200,13 @@ class APIHandler {
     this.weChat = weChatAPI;
   }
 
-  async notifyOwner(ip = '', deviceInfo = null) {
+  async notifyOwner(ip = '', deviceInfo = null, geo = null) {
     const message = '您好，有人需要您挪车，麻烦您尽快处理，感谢您的配合~ 🙏';
-    const result = await this.weChat.sendTextMessage(message + buildFooter(deviceInfo, ip));
+    const result = await this.weChat.sendTextMessage(message + buildFooter(deviceInfo, ip, geo));
     return result.success ? ResponseUtils.success('提醒已发送，车主会尽快处理') : ResponseUtils.error(result.message);
   }
 
-  async sendMessage(data, ip = '') {
+  async sendMessage(data, ip = '', geo = null) {
     if (!data.message || !data.message.trim()) {
       return ResponseUtils.error('消息内容不能为空', 400);
     }
@@ -206,7 +216,7 @@ class APIHandler {
       return ResponseUtils.error(`消息过长，请限制在 ${MAX_MESSAGE_LENGTH} 字以内`, 400);
     }
 
-    const fullMessage = `💬 访客留言：\n${message}` + buildFooter(data.deviceInfo, ip);
+    const fullMessage = `💬 访客留言：\n${message}` + buildFooter(data.deviceInfo, ip, geo);
     const result = await this.weChat.sendTextMessage(fullMessage);
     return result.success ? ResponseUtils.success('消息已发出，车主会尽快处理') : ResponseUtils.error(result.message);
   }
@@ -565,6 +575,17 @@ class RequestHandler {
     this.api = new APIHandler(this.weChat);
   }
 
+  getGeo(request) {
+    const cf = request.cf;
+    if (!cf) return null;
+    return {
+      country: cf.country || '',
+      region: cf.region || '',
+      city: cf.city || '',
+      org: cf.asOrganization || ''
+    };
+  }
+
   async handle(request) {
     try {
       const url = new URL(request.url);
@@ -576,6 +597,9 @@ class RequestHandler {
                  request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() ||
                  request.headers.get('X-Real-IP') ||
                  '未知IP';
+
+      // 获取客户端地理位置（request.cf 仅在请求经过 Cloudflare 边缘时存在）
+      const geo = this.getGeo(request);
 
       // CORS 预检
       if (method === 'OPTIONS') {
@@ -593,7 +617,7 @@ class RequestHandler {
         } catch {
           return ResponseUtils.error('请求格式错误', 400);
         }
-        return await this.api.notifyOwner(ip, data.deviceInfo);
+        return await this.api.notifyOwner(ip, data.deviceInfo, geo);
       }
 
       if (pathname === '/send-message') {
@@ -606,7 +630,7 @@ class RequestHandler {
         } catch {
           return ResponseUtils.error('请求格式错误', 400);
         }
-        return await this.api.sendMessage(data, ip);
+        return await this.api.sendMessage(data, ip, geo);
       }
 
       if (pathname === '/health' && method === 'GET') {
