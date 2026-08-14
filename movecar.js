@@ -74,16 +74,23 @@ const ResponseUtils = {
   }
 };
 
-// 组装设备信息段落（仅在确有信息时返回，否则空串）
-function buildDeviceBlock(deviceInfo, ip) {
-  const lines = [];
-  if (ip && ip !== '未知IP') lines.push(`IP地址：${ip}`);
-  if (deviceInfo) {
-    if (deviceInfo.os) lines.push(`操作系统：${deviceInfo.os}`);
-    if (deviceInfo.browser) lines.push(`浏览器：${deviceInfo.browser}`);
-    if (deviceInfo.screen) lines.push(`屏幕：${deviceInfo.screen}`);
-  }
-  return lines.length ? `\n\n📱 设备信息：\n${lines.join('\n')}` : '';
+// 北京时间格式化 YYYY-MM-DD HH:mm
+function formatTime(date = new Date()) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  }).format(date).replace(/\//g, '-');
+}
+
+// 组装通知页脚：时间 + 设备 + IP（按有内容才展示）
+function buildFooter(deviceInfo, ip) {
+  const lines = [`📅 时间：${formatTime()}`];
+  const dev = [deviceInfo && deviceInfo.os, deviceInfo && deviceInfo.browser, deviceInfo && deviceInfo.screen]
+    .filter(Boolean);
+  if (dev.length) lines.push(`📱 设备：${dev.join(' · ')}`);
+  if (ip && ip !== '未知IP') lines.push(`🌐 IP：${ip}`);
+  return `\n\n${lines.join('\n')}`;
 }
 
 // ==================== 企业微信 API ====================
@@ -184,10 +191,8 @@ class APIHandler {
   }
 
   async notifyOwner(ip = '', deviceInfo = null) {
-    let message = '您好，有人需要您挪车，麻烦您尽快处理！\n\n感谢您的配合~ 🙏';
-    message += buildDeviceBlock(deviceInfo, ip);
-
-    const result = await this.weChat.sendTextMessage(message);
+    const message = '您好，有人需要您挪车，麻烦您尽快处理，感谢您的配合~ 🙏';
+    const result = await this.weChat.sendTextMessage(message + buildFooter(deviceInfo, ip));
     return result.success ? ResponseUtils.success('提醒已发送，车主会尽快处理') : ResponseUtils.error(result.message);
   }
 
@@ -201,7 +206,7 @@ class APIHandler {
       return ResponseUtils.error(`消息过长，请限制在 ${MAX_MESSAGE_LENGTH} 字以内`, 400);
     }
 
-    const fullMessage = message + buildDeviceBlock(data.deviceInfo, ip);
+    const fullMessage = `💬 访客留言：\n${message}` + buildFooter(data.deviceInfo, ip);
     const result = await this.weChat.sendTextMessage(fullMessage);
     return result.success ? ResponseUtils.success('消息已发出，车主会尽快处理') : ResponseUtils.error(result.message);
   }
