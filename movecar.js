@@ -86,6 +86,18 @@ function formatTime(date = new Date()) {
 // 国家代码 → 中文名（常见情况）
 const COUNTRY_CN = { CN: '中国', HK: '中国香港', MO: '中国澳门', TW: '中国台湾' };
 
+// 运营商 AS 组织名 → 中文简称（常见国内运营商）
+function formatCarrier(org) {
+  if (!org) return '';
+  if (/移动|China Mobile/i.test(org)) return '中国移动';
+  if (/联通|Unicom/i.test(org)) return '中国联通';
+  if (/铁通|TieTong/i.test(org)) return '中国铁通';
+  if (/电信|Chinanet|Telecom/i.test(org)) return '中国电信';
+  if (/广电|Broadcasting Network/i.test(org)) return '中国广电';
+  if (/鹏博士|Dr\.?\s?Peng/i.test(org)) return '鹏博士';
+  return org;
+}
+
 // 组装通知页脚：时间 + 设备 + IP + 归属地/运营商(IP 衍生，故 IP 在前)
 function buildFooter(deviceInfo, ip, geo) {
   const lines = [`📅 时间：${formatTime()}`];
@@ -98,7 +110,7 @@ function buildFooter(deviceInfo, ip, geo) {
     const loc = [geo.region, geo.city].filter(Boolean).join(' ');
     const locStr = [country, loc].filter(Boolean).join(' ');
     if (locStr) lines.push(`📍 归属地：${locStr}`);
-    if (geo.org) lines.push(`🏢 ${geo.org}`);
+    if (geo.org) lines.push(`🏢 运营商：${formatCarrier(geo.org)}`);
   }
   return `\n\n${lines.join('\n')}`;
 }
@@ -224,9 +236,11 @@ class APIHandler {
   async healthCheck() {
     try {
       config.validate();
+      // 真实探测：拉取一次 token 校验 secret/corpid 是否正确（token 已被缓存，不会频繁打微信）
+      await this.weChat.getAccessToken();
       return ResponseUtils.json({ status: 'ok', timestamp: Date.now() });
     } catch (error) {
-      return ResponseUtils.error(error.message, 503);
+      return ResponseUtils.error('服务不可用：' + error.message, 503);
     }
   }
 }
