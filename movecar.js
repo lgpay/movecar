@@ -33,13 +33,23 @@ const rateLimiter = {
   windowMs: 60 * 1000,
   max: 5,
   hits: new Map(),
+  sweepAt: 0,
   check(ip) {
     const now = Date.now();
     const arr = (this.hits.get(ip) || []).filter(t => now - t < this.windowMs);
-    this.hits.set(ip, arr);
-    if (arr.length >= this.max) return false;
+    if (arr.length >= this.max) {
+      this.hits.set(ip, arr);
+      return false;
+    }
     arr.push(now);
     this.hits.set(ip, arr);
+    // 周期性清理：删除最新时间戳也已过期的 IP 键，避免 Map 随独立访客无限增长
+    if (now - this.sweepAt > this.windowMs) {
+      this.sweepAt = now;
+      for (const [k, v] of this.hits) {
+        if (!v.length || now - v[v.length - 1] >= this.windowMs) this.hits.delete(k);
+      }
+    }
     return true;
   }
 };
@@ -48,10 +58,7 @@ const rateLimiter = {
 const ResponseUtils = {
   json(data, status = 200, headers = {}) {
     const defaultHeaders = {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type'
+      'Content-Type': 'application/json'
     };
     return new Response(JSON.stringify(data), { status, headers: { ...defaultHeaders, ...headers } });
   },
@@ -240,7 +247,7 @@ class APIHandler {
       await this.weChat.getAccessToken();
       return ResponseUtils.json({ status: 'ok', timestamp: Date.now() });
     } catch (error) {
-      return ResponseUtils.error('服务不可用：' + error.message, 503);
+      return ResponseUtils.error('服务不可用，请检查配置或企业微信连通性', 503);
     }
   }
 }
@@ -625,6 +632,7 @@ class RequestHandler {
         if (method !== 'POST') return ResponseUtils.error('方法不允许', 405);
         config.validate();
         if (!rateLimiter.check(ip)) return ResponseUtils.error('操作太频繁，请稍后再试', 429);
+        if (Number(request.headers.get('content-length') || 0) > 8192) return ResponseUtils.error('请求体过大', 413);
         let data;
         try {
           data = await request.json();
@@ -638,6 +646,7 @@ class RequestHandler {
         if (method !== 'POST') return ResponseUtils.error('方法不允许', 405);
         config.validate();
         if (!rateLimiter.check(ip)) return ResponseUtils.error('操作太频繁，请稍后再试', 429);
+        if (Number(request.headers.get('content-length') || 0) > 8192) return ResponseUtils.error('请求体过大', 413);
         let data;
         try {
           data = await request.json();
