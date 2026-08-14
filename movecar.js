@@ -86,12 +86,13 @@ function formatTime(date = new Date()) {
 // 国家代码 → 中文名（常见情况）
 const COUNTRY_CN = { CN: '中国', HK: '中国香港', MO: '中国澳门', TW: '中国台湾' };
 
-// 组装通知页脚：时间 + 设备 + 归属地 + IP（按有内容才展示）
+// 组装通知页脚：时间 + 设备 + IP + 归属地/运营商(IP 衍生，故 IP 在前)
 function buildFooter(deviceInfo, ip, geo) {
   const lines = [`📅 时间：${formatTime()}`];
-  const dev = [deviceInfo && deviceInfo.os, deviceInfo && deviceInfo.browser, deviceInfo && deviceInfo.screen]
+  const dev = [deviceInfo && deviceInfo.os, deviceInfo && deviceInfo.browser]
     .filter(Boolean);
   if (dev.length) lines.push(`📱 设备：${dev.join(' · ')}`);
+  if (ip && ip !== '未知IP') lines.push(`🌐 IP：${ip}`);
   if (geo) {
     const country = COUNTRY_CN[geo.country] || geo.country || '';
     const loc = [geo.region, geo.city].filter(Boolean).join(' ');
@@ -99,7 +100,6 @@ function buildFooter(deviceInfo, ip, geo) {
     if (locStr) lines.push(`📍 归属地：${locStr}`);
     if (geo.org) lines.push(`🏢 ${geo.org}`);
   }
-  if (ip && ip !== '未知IP') lines.push(`🌐 IP：${ip}`);
   return `\n\n${lines.join('\n')}`;
 }
 
@@ -557,7 +557,6 @@ const HTMLPage = {
         return {
           os: os,
           browser: browser,
-          screen: window.screen.width + 'x' + window.screen.height,
           userAgent: ua
         };
       }
