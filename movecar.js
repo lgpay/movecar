@@ -430,10 +430,10 @@ const HTMLPage = {
       </div>
 
     <div class="actions">
-      <button class="btn btn-primary" id="notifyBtn" onclick="app.notifyOwner()">
-        <span>📨</span>
-        <span>通知车主挪车</span>
-      </button>
+        <button class="btn btn-primary" id="notifyBtn" onclick="app.notifyOwner()">
+          <span>📨</span>
+          <span>一键通知挪车</span>
+        </button>
       ${config.phoneNumber ? `
       <button class="btn btn-secondary" id="callBtn" onclick="app.callOwner()">
         <span>📞</span>
